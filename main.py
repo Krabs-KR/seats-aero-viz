@@ -13,18 +13,18 @@ from seats_aero.api import Availability, Route, partners, partners_mapping
 from seats_aero.plot import get_route_df
 
 st.set_page_config(
-    page_title="Seats.aero Availability Visualizer",
+    page_title="Seats.aero 시각화 도구",
     page_icon=":airplane:",
 )
 
-st.title("✈️Seats.aero Availability Visualizer")
+st.title("✈️Seats.aero 시각화 도구")
 
 with st.sidebar:
-    st.title("Partners")
-    default_partner = "aeroplan"
+    st.title("조회 가능한 항공사")
+    default_partner = "american"
     partner = (
         st.radio(
-            "Partners",
+            "조회 가능한 항공사",
             partners,
             format_func=partners_mapping.get,
             label_visibility="hidden",
@@ -32,17 +32,14 @@ with st.sidebar:
         or default_partner
     )
 
-
-default_route = "US - LHR - NYC, CA - HKG"
-route = st.text_input("Route", default_route, max_chars=300, key="route").upper()
-
+default_route = "KR - HKG"
+route = st.text_input("노선 입력 (예: KR - HKG)", default_route, max_chars=300, key="route").upper()
 
 @st.cache_data(ttl=timedelta(minutes=15))
 def load_availabilities(partner: str) -> Tuple[List[Availability], datetime]:
     routes = Route.fetch()
     route_map = {r.id: r for r in routes}
     return Availability.fetch(route_map, partner), time.now()
-
 
 availabilities, cache_freshness = load_availabilities(partner)
 
@@ -62,28 +59,27 @@ col1, col2, col3 = st.columns([3, 3, 2])
 
 with col1:
     airlines = st.multiselect(
-        "Airlines to include (e.g. UA)",
+        "포함할 항공사 (예: UA)",
         all_airlines,
     )
 
 with col2:
     fares = st.multiselect(
-        "Fares to include (e.g. J)",
+        "포함할 클래스 (예: J)",
         all_fares,
     )
 
 with col3:
     expand_country = st.checkbox(
-        "Expand country",
+        "국가 코드 확장",
         value=True,
-        help="ISO 3166-1 alpha-2 codes. See https://en.wikipedia.org/wiki/ISO_3166-1#Current_codes.",
+        help="ISO 3166-1 alpha-2 국제기준 코드 사용. 참고: https://en.wikipedia.org/wiki/ISO_3166-1#Current_codes.",
     )
     expand_city = st.checkbox(
-        "Expand city",
+        "도시 코드 확장",
         value=True,
-        help=f"Currently only supports {', '.join(city_expansion_dict().keys())}",
+        help=f"지원 도시: {', '.join(city_expansion_dict().keys())}",
     )
-
 
 def canonicalize_route(
     route: str, expand_country: bool = False, expand_city: bool = False
@@ -95,7 +91,6 @@ def canonicalize_route(
         stops = seg.split("-")
         res.extend([(org, dest) for org, dest in zip(stops[:-1], stops[1:])])
     return expand_route(res, expand_country, expand_city)
-
 
 def expand_route(
     route: List[Tuple[str, str]], expand_country: bool, expand_city: bool
@@ -110,14 +105,12 @@ def expand_route(
         )
     return res
 
-
 def expand_code(code: str, expand_country: bool, expand_city: bool) -> List[str]:
     if expand_country and code in country_expansion_dict():
         return country_expansion_dict()[code]
     if expand_city and code in city_expansion_dict():
         return city_expansion_dict()[code]
     return [code]
-
 
 time_since_cache = time.now() - cache_freshness
 
@@ -129,11 +122,11 @@ filtered_route = [
 route_df = get_route_df(availabilities, filtered_route, airlines, fares)
 
 st.caption(
-    f"Fetched {humanize.intword(len(availabilities))} availabilities {humanize.naturaldelta(time_since_cache)} ago"
+    f"{humanize.intword(len(availabilities))}개의 좌석 정보를 {humanize.naturaldelta(time_since_cache)} 전에 불러왔습니다"
 )
 
 if len(route_df) == 0:
-    st.error("No route found")
+    st.error("해당 조건에 일치하는 노선이 없습니다.")
     st.stop()
 
 chart = (
@@ -159,14 +152,21 @@ chart = (
             "fare",
             legend=alt.Legend(
                 orient="top",
+                title="클래스 종류",
             ),
-            title="Fare",
+            title="클래스",
             scale=alt.Scale(
                 domain=["Y", "W", "J", "F"],
                 range=["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"],
             ),
         ),
-        tooltip=["airlines", "fare", "date", "freshness", "direct"],
+        tooltip=[
+            alt.Tooltip("airlines", title="항공사"),
+            alt.Tooltip("fare", title="클래스"),
+            alt.Tooltip("date", title="날짜"),
+            alt.Tooltip("freshness", title="데이터 최신도"),
+            alt.Tooltip("direct", title="직항 여부"),
+        ],
         row=alt.Row(
             "route",
             sort=[f"{org} -> {dest}" for org, dest in filtered_route],
@@ -180,7 +180,7 @@ chart = (
             alt.datum.direct,
             alt.value(1),
             alt.value(0.5),
-        ),  # type: ignore
+        ),
     )
     .properties(height=alt.Step(12))
     .interactive()
@@ -194,10 +194,10 @@ st.altair_chart(
 
 displayed_route = set(route_df["route"].unique())
 
-with st.expander("Raw data"):
+with st.expander("📄 원시 데이터 보기"):
     st.write(route_df)
 
-with st.expander("Route without availability"):
+with st.expander("❌ 좌석 정보가 없는 노선"):
     st.write(
         pd.DataFrame(
             [
@@ -205,8 +205,8 @@ with st.expander("Route without availability"):
                 for i, (org, dest) in enumerate(canonicalized_route)
                 if (org, dest) not in displayed_route and i < 1000
             ],
-            columns=["Route"],
+            columns=["노선"],
         )
     )
     if len(canonicalized_route) > 1000:
-        st.write(f"and {len(canonicalized_route) - 1000} more...")
+        st.write(f"외 {len(canonicalized_route) - 1000}개 노선이 더 있습니다...")
