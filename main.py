@@ -13,11 +13,11 @@ from seats_aero.api import Availability, Route, partners, partners_mapping
 from seats_aero.plot import get_route_df
 
 st.set_page_config(
-    page_title="Seats.aero 시각화 도구",
+    page_title="마일리지발권 가용성 탐색",
     page_icon=":airplane:",
 )
 
-st.title("✈️Seats.aero 시각화 도구")
+st.title("마일리지발권 가용성 탐색")
 
 with st.sidebar:
     st.title("조회 가능한 항공사")
